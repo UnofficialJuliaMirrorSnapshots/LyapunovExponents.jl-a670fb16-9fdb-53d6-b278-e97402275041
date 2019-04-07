@@ -1,0 +1,68 @@
+## Documentation: http://docs.travis-ci.com/user/languages/julia/
+language: julia
+os:
+  - linux
+julia:
+  - 0.6
+  - nightly
+env:
+  global:
+    # Suppress "Could not connect to display" warnings from GR Framework.
+    # * https://gr-framework.org/about.html#file-formats
+    # * https://github.com/jheinen/gr/blob/v0.31.1/lib/gks/util.c#L67
+    - GKS_WSTYPE: png
+  matrix:
+    - REQUIRE_VERSIONS=minimal
+    - REQUIRE_VERSIONS=latest
+notifications:
+  email: false
+git:
+  depth: 99999999
+cache:
+  pip: true
+  directories:
+    - /home/travis/.julia
+
+matrix:
+  allow_failures:
+  - julia: nightly
+
+## uncomment and modify the following lines to manually install system packages
+#addons:
+#  apt: # apt-get for linux
+#    packages:
+#    - gfortran
+before_script:
+  # Remove this package to install it afresh (by the default script).
+  # Note that we cannot use `before_cache` to remove it before the
+  # cache upload since it occurs before `after_success` in which
+  # Documenter.jl needs it:
+  - julia --color=yes -e 'Pkg.rm("LyapunovExponents")'
+  - rm -rfv ~/.julia/v*/LyapunovExponents/
+  # Install Coverage.jl and Documenter.jl here so that they will be cached:
+  - julia --color=yes -e 'map(Pkg.add, ["Coverage", "Documenter", "GR"])'
+  # Run misc/use-minimal-versions.jl or misc/use-latest-versions.jl to
+  # install appropriate packages:
+  - julia --color=yes misc/use-"$REQUIRE_VERSIONS"-versions.jl
+  # This is one of the step in the "official" step:
+  - julia --color=yes -e 'Pkg.clone(pwd())'
+  # This is one of the step in the "official" step.  It makes sense to
+  # do it in before_script:
+  - julia --color=yes -e 'Pkg.build("LyapunovExponents")'
+  # Show package version numbers:
+  - julia --color=yes misc/show-versions.jl
+
+script:
+  - julia --color=yes --check-bounds=yes -e 'Pkg.test("LyapunovExponents"; coverage=true)'
+  - julia --color=yes -e 'cd(Pkg.dir("LyapunovExponents")); include(joinpath("docs", "plot_gallery.jl"))'
+
+after_success:
+  # push coverage results to Coveralls
+  - julia --color=yes -e 'cd(Pkg.dir("LyapunovExponents")); Pkg.add("Coverage"); using Coverage; Coveralls.submit(Coveralls.process_folder())'
+  # push coverage results to Codecov
+  - julia --color=yes -e 'cd(Pkg.dir("LyapunovExponents")); Pkg.add("Coverage"); using Coverage; Codecov.submit(Codecov.process_folder())'
+  - julia --color=yes -e 'Pkg.add("Documenter")'
+  - julia --color=yes -e 'cd(Pkg.dir("LyapunovExponents")); include(joinpath("docs", "make.jl"))'
+
+after_script:
+  - julia --color=yes misc/show-versions.jl
